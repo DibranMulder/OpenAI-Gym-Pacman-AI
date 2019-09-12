@@ -3,82 +3,64 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as T
 
-import matplotlib
-import matplotlib.pyplot as plt
+from dqn import Net
 
 import time
 import gym
 
 env = gym.make('MsPacman-v0')
 
-# ['NOOP', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT']
+# if gpu is to be used
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print('Running on:',device)
+
+action_names = ['NOOP', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT']
 image_dimensions = 210*160*3
-
-class Net(nn.Module):
-
-    def __init__(self):
-        super(Net, self).__init__()
-        # 3 input image channels, 32 output channels, 5x5 square convolution
-        # kernel
-        self.conv1 = nn.Conv2d(3, 32, 5)
-        self.conv2 = nn.Conv2d(32, 32, 5)
-        # an affine operation: y = Wx + b
-        # I Would expect 32*32*32 = 32768 
-        self.fc1 = nn.Linear(58016, 8192)  # 6*6 from image dimension
-        self.fc2 = nn.Linear(8192, 2048)
-        self.fc3 = nn.Linear(2048, 256)
-        self.fc4 = nn.Linear(256, 9)
-        self.sm = torch.nn.Softmax(dim=1)
-
-    def forward(self, x):
-        # Max pooling over a (2, 2) window
-        x = F.max_pool2d(F.relu(self.conv1(x)), (2, 2))
-        # If the size is a square you can only specify a single number
-        x = F.max_pool2d(F.relu(self.conv2(x)), 2)
-        x = x.view(-1, self.num_flat_features(x))
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
-        x = self.fc4(x)
-        x = self.sm(x)
-        return x
-
-    def num_flat_features(self, x):
-        size = x.size()[1:]  # all dimensions except the batch dimension
-        num_features = 1
-        for s in size:
-            num_features *= s
-        return num_features
+num_episodes = 5
+action_threshold = 200
 
 net = Net()
-print(net)
 
-batch_tensor = torch.randn(*(10, 3, 256, 256))
+def print_action(action):
+    print('Action:', action_names[action])
 
-img = torch.randn(1, 3, 210, 160)
-
-out = net(img)
-print(out)
-
-num_episodes = 5
 for i in range(num_episodes):
+    print('Episode: ',i)
     state = env.reset()
+
+    observation = None
+    action = None
+    frames = 0
 
     for _ in range(1000):
         env.render()
+        frames += 1
 
-        randomAction = env.action_space.sample()
-        observation,reward,done,info = env.step(randomAction)
-        
-        print(done) # bool
-        print(info) # json with lives
-        
-        # Converts a PIL Image or numpy.ndarray (H x W x C) in the range [0, 255] to a torch.FloatTensor of shape (C x H x W) in the range [0.0, 1.0]
-        input = T.ToTensor()(observation)
-        # Adds dimension
-        out = net(input.unsqueeze(0))
-        print(out)
+        if action_threshold > frames:
+            continue
+
+        print('Action threshold met',frames)
+
+        if observation is None:
+            action = env.action_space.sample()
+            print('Random action:',action)            
+        else:
+            # Converts a PIL Image or numpy.ndarray (H x W x C) in the range [0, 255] to a torch.FloatTensor of shape (C x H x W) in the range [0.0, 1.0]
+            input = T.ToTensor()(observation)
+            # Adds dimension, its excepts a 4 dimensional array.
+            out = net(input.unsqueeze(0))
+            # print(out)
+            netAction = out.max(1)[1].view(1, 1)
+            action = netAction.item()
+            print_action(action)
+            print('NN action:',action)
+
+        observation,reward,done,info = env.step(action)
+                
+        # print(done) # bool
+        # print(info) # json with lives
 
         # time.sleep(0.1)
 
 env.close()
+
