@@ -1,6 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision.transforms as T
+
+import matplotlib
+import matplotlib.pyplot as plt
 
 import time
 import gym
@@ -24,6 +28,7 @@ class Net(nn.Module):
         self.fc2 = nn.Linear(8192, 2048)
         self.fc3 = nn.Linear(2048, 256)
         self.fc4 = nn.Linear(256, 9)
+        self.sm = torch.nn.Softmax(dim=1)
 
     def forward(self, x):
         # Max pooling over a (2, 2) window
@@ -35,6 +40,7 @@ class Net(nn.Module):
         x = F.relu(self.fc2(x))
         x = F.relu(self.fc3(x))
         x = self.fc4(x)
+        x = self.sm(x)
         return x
 
     def num_flat_features(self, x):
@@ -63,13 +69,16 @@ for i in range(num_episodes):
 
         randomAction = env.action_space.sample()
         observation,reward,done,info = env.step(randomAction)
+        
+        print(done) # bool
+        print(info) # json with lives
+        
+        # Converts a PIL Image or numpy.ndarray (H x W x C) in the range [0, 255] to a torch.FloatTensor of shape (C x H x W) in the range [0.0, 1.0]
+        input = T.ToTensor()(observation)
+        # Adds dimension
+        out = net(input.unsqueeze(0))
+        print(out)
 
-        tt = torch.from_numpy(observation)
-        # input = torch.squeeze(tt)
-
-        # out = net(input)
-        # print(out)
-
-        time.sleep(1)
+        # time.sleep(0.1)
 
 env.close()
