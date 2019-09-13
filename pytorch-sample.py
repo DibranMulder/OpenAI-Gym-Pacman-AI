@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import torchvision.transforms as T
 
 from dqn import Net
+from replaymemory import ReplayMemory
 
 import time
 import gym
@@ -17,9 +18,16 @@ print('Running on:',device)
 action_names = ['NOOP', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT']
 image_dimensions = 210*160*3
 num_episodes = 5
-action_threshold = 200
+action_threshold = 250
+train_batch_size = 64
 
-net = Net()
+memory = ReplayMemory(10000)
+
+target_net = Net()
+target_net.eval()
+
+def store_transition(state, action, reward, observation):
+    memory.push(state, action, state, reward)
 
 def print_action(action):
     print('Action:', action_names[action])
@@ -33,7 +41,7 @@ for i in range(num_episodes):
     frames = 0
 
     for _ in range(1000):
-        env.render()
+        state = env.render()
         frames += 1
 
         if action_threshold > frames:
@@ -41,14 +49,17 @@ for i in range(num_episodes):
 
         print('Action threshold met',frames)
 
-        if observation is None:
+        rand = torch.randint(0, 10, (1,)).item()
+        
+
+        if observation is None or rand % 2 == 0:
             action = env.action_space.sample()
             print('Random action:',action)            
         else:
             # Converts a PIL Image or numpy.ndarray (H x W x C) in the range [0, 255] to a torch.FloatTensor of shape (C x H x W) in the range [0.0, 1.0]
             input = T.ToTensor()(observation)
             # Adds dimension, its excepts a 4 dimensional array.
-            out = net(input.unsqueeze(0))
+            out = target_net(input.unsqueeze(0))
             # print(out)
             netAction = out.max(1)[1].view(1, 1)
             action = netAction.item()
@@ -56,7 +67,10 @@ for i in range(num_episodes):
             print('NN action:',action)
 
         observation,reward,done,info = env.step(action)
-                
+        store_transition(state, action, reward, observation)
+
+        state = observation
+        print(len(memory))
         # print(done) # bool
         # print(info) # json with lives
 
