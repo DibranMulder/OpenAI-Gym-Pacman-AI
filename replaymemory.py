@@ -1,3 +1,4 @@
+import random
 from collections import namedtuple
 
 Transition = namedtuple('Transition',
